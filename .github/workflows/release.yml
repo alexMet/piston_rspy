@@ -48,7 +48,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: x86_64
-          args: --release -i 3.8 3.9 3.10 3.11 3.12 3.13 3.14 -o dist --sdist
+          args: --release -o dist --sdist
 
       - name: Install built wheel - x86_64
         run: |
@@ -56,9 +56,9 @@ jobs:
           cd dist && python3 -c "import piston_rspy"
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-macos-x86
           path: dist
 
   macos-universal2:
@@ -80,7 +80,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: universal2-apple-darwin
-          args: --release -i 3.8 3.9 3.10 3.11 3.12 3.13 3.14 -o dist
+          args: --release -o dist
 
       - name: Install built wheel - universal2
         run: |
@@ -88,9 +88,9 @@ jobs:
           cd dist && python3 -c "import piston_rspy"
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-macos-universal2
           path: dist
 
   windows:
@@ -117,7 +117,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release -i 3.8 3.9 3.10 3.11 3.12 3.13 3.14 -o dist
+          args: --release -o dist
 
       - name: Install built wheel - ${{ matrix.target }}
         run: |
@@ -125,9 +125,9 @@ jobs:
           cd dist && python3 -c "import piston_rspy"
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-windows-${{ matrix.target }}
           path: dist
 
   linux:
@@ -152,7 +152,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           manylinux: auto
-          args: --release -i 3.8 3.9 3.10 3.11 3.12 3.13 3.14 -o dist
+          args: --release -o dist
 
       - name: Install built wheel - ${{ matrix.target }}
         if: matrix.target == 'x86_64'
@@ -161,9 +161,9 @@ jobs:
           cd dist && python3 -c "import piston_rspy"
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-linux-${{ matrix.target }}
           path: dist
 
   linux-cross:
@@ -187,7 +187,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           manylinux: 2_28
-          args: --release -i 3.8 3.9 3.10 3.11 3.12 3.13 3.14 -o dist
+          args: --release -o dist
 
       - name: Install built wheel - ${{ matrix.target }}
         uses: uraimo/run-on-arch-action@v2.6.0
@@ -204,9 +204,9 @@ jobs:
             cd dist && python3 -c "import piston_rspy"
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-linux-cross-${{ matrix.target }}
           path: dist
 
   musllinux:
@@ -231,7 +231,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           manylinux: musllinux_1_2
-          args: --release -i 3.8 3.9 3.10 3.11 3.12 3.13 3.14 -o dist
+          args: --release -o dist
 
       - name: Install built wheel - ${{ matrix.target }}
         if: matrix.target == 'x86_64-unknown-linux-musl'
@@ -248,9 +248,9 @@ jobs:
             cd /io/dist/ && python3 -c "import piston_rspy"
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-musllinux-${{ matrix.target }}
           path: dist
 
   musllinux-cross:
@@ -278,7 +278,7 @@ jobs:
         with:
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_2
-          args: --release -i 3.8 3.9 3.10 3.11 3.12 3.13 3.14 -o dist
+          args: --release -o dist
 
       - name: Install built wheel - ${{ matrix.platform.arch }}
         uses: uraimo/run-on-arch-action@v2.6.0
@@ -296,15 +296,17 @@ jobs:
             cd dist && python3 -c "import piston_rspy"
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-musllinux-cross-${{ matrix.platform.arch }}
           path: dist
 
   release:
     name: Release
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'release' && github.event.action == 'published' }}
+    permissions:
+      contents: write
     needs: [
         version-check,
         macos-x86,
@@ -318,14 +320,14 @@ jobs:
 
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: wheels
+          pattern: wheels-*
+          merge-multiple: true
 
-      - name: Publish to PyPI
-        uses: messense/maturin-action@v1
-        env:
-          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      - name: Attach wheels to GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          command: upload
-          args: --skip-existing *
+          files: |
+            *.whl
+            *.tar.gz

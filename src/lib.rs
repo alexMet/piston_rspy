@@ -12,7 +12,7 @@ pub use models::File;
 pub use models::Runtime;
 
 #[pymodule]
-pub fn piston_rspy(_py: Python, m: &PyModule) -> PyResult<()> {
+pub fn piston_rspy(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Runtime>()?;
     m.add_class::<File>()?;
     m.add_class::<ExecResult>()?;

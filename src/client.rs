@@ -142,12 +142,12 @@ impl Client {
     ///
     /// - `RuntimeError`: If the request to Piston failed.
     #[pyo3(text_signature = "(self) -> list[Runtime]")]
-    fn fetch_runtimes<'a>(&self, py: Python<'a>) -> PyResult<&'a PyAny> {
+    fn fetch_runtimes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let client = self.inner.clone();
 
-        pyo3_asyncio::tokio::future_into_py_with_locals::<_, Vec<Runtime>>(
+        pyo3_async_runtimes::tokio::future_into_py_with_locals::<_, Vec<Runtime>>(
             py,
-            pyo3_asyncio::tokio::get_current_locals(py)?,
+            pyo3_async_runtimes::tokio::get_current_locals(py)?,
             async move {
                 match client.fetch_runtimes().await {
                     Ok(runtimes) => Ok(Python::with_gil(|_| {
@@ -179,11 +179,11 @@ impl Client {
     ///
     /// - `RuntimeError`: If the request to Piston failed.
     #[pyo3(text_signature = "(self, executor: Executor, /) -> ExecResponse")]
-    fn execute<'a>(&self, py: Python<'a>, executor: &Executor) -> PyResult<&'a PyAny> {
+    fn execute<'py>(&self, py: Python<'py>, executor: &Executor) -> PyResult<Bound<'py, PyAny>> {
         let client = self.inner.clone();
         let exec = executor.convert();
 
-        pyo3_asyncio::tokio::future_into_py(py, async move {
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
             match client.execute(&exec).await {
                 Ok(response) => Ok(Python::with_gil(|_| ExecResponse::from_response(response))),
                 Err(e) => Err(Python::with_gil(|_| {

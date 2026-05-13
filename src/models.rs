@@ -219,7 +219,7 @@ impl File {
     /// - `File`: The new file.
     #[classmethod]
     #[pyo3(text_signature = "(cls, path: str, /) -> File")]
-    fn load_from(_cls: &PyType, path: String) -> PyResult<Self> {
+    fn load_from(_cls: &Bound<'_, PyType>, path: String) -> PyResult<Self> {
         match File_::load_from(path.as_str()) {
             Ok(file) => Ok(Python::with_gil(|_| Self { inner: file })),
             Err(err) => Err(Python::with_gil(|_| {
