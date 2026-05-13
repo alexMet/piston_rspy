@@ -210,9 +210,6 @@ impl ExecResponse {
 /// to signify no limit.
 #[pyclass]
 #[derive(Clone)]
-#[pyo3(
-    text_signature = "(language: str = \"\", version: str = \"*\", files: list[File] = [], stdin: str = \"\", args: list[str] = [], compile_timeout: int = 10000, run_timeout: int = 3000, compile_memory_limit: int = -1, run_memory_limit: int = -1, /) -> Executor"
-)]
 pub struct Executor {
     inner: Executor_,
 }

@@ -14,7 +14,6 @@ use pyo3::types::PyType;
 /// >> instantiate the class, however.
 #[pyclass]
 #[derive(Clone)]
-#[pyo3(text_signature = "(language: str, version: str, aliases: list[str], /) -> Runtime")]
 pub struct Runtime {
     inner: Runtime_,
 }
@@ -79,9 +78,6 @@ impl Runtime {
 /// A file that contains the source code to be executed.
 #[pyclass]
 #[derive(Clone)]
-#[pyo3(
-    text_signature = "(name: str = \"\", content: str = \"\", encoding: str = \"utf8\", /) -> File"
-)]
 pub struct File {
     inner: File_,
 }

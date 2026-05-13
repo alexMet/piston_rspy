@@ -15,7 +15,6 @@ use super::Runtime;
 /// also immutable.
 #[pyclass]
 #[derive(Clone)]
-#[pyo3(text_signature = "() -> Client")]
 pub struct Client {
     inner: Client_,
     headers: HashMap<String, String>,
