@@ -1,0 +1,176 @@
+version: 2.1
+
+orbs:
+  aws-cli: circleci/aws-cli@4.1.2
+
+aliases:
+  - &only-pull-requests
+    branches:
+      ignore:
+        - /qa.*/
+        - /QA.*/
+        - /perf-qa.*/
+        - master
+        - /hotfix.*/
+  - &only-main
+    branches:
+      only:
+        - master
+
+commands:
+
+  setup-uv:
+    description: 'Restore or install uv and cache it'
+    steps:
+      - restore_cache:
+          name: Restore uv cache
+          keys:
+            - uv-0.6.11
+      - run:
+          name: Install uv if not cached
+          command: |
+            if [ ! -f /home/circleci/.local/bin/uv ]; then
+              curl -LsSf https://astral.sh/uv/0.6.11/install.sh | sh
+            fi
+            uv --version
+      - save_cache:
+          name: Save uv cache
+          key: uv-0.6.11
+          paths:
+            - /home/circleci/.local/bin/uv
+
+  setup-rust:
+    description: 'Install the Rust toolchain (required to build the native extension)'
+    steps:
+      - run:
+          name: Install Rust
+          command: |
+            if [ ! -f /home/circleci/.cargo/bin/cargo ]; then
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+            fi
+            echo 'source "$HOME/.cargo/env"' >> "$BASH_ENV"
+            source "$HOME/.cargo/env"
+            rustc --version
+
+  configure-code-artifact:
+    description: Configure the AWS CodeArtifact repository
+    steps:
+      - restore_cache:
+          name: Restore awscli cache
+          key: python-awscli-v1.38.25-v2
+      - run:
+          name: Configure CodeArtifact
+          command: |
+            if [ ! -d .venv_codeartifact ]
+            then
+              uv venv .venv_codeartifact --cache-dir=.cache_codeartifact/uv
+            fi
+            source .venv_codeartifact/bin/activate
+            uv pip install awscli==1.38.25 --cache-dir=.cache_codeartifact/uv
+            export AWS_CODEARTIFACT_TOKEN="$(aws codeartifact get-authorization-token --domain $CODEARTIFACT_DOMAIN --query authorizationToken --output text)"
+            echo export UV_INDEX="https://aws:${AWS_CODEARTIFACT_TOKEN}@${CODEARTIFACT_DOMAIN}-${AWS_ACCOUNT_ID}.d.codeartifact.${AWS_REGION}.amazonaws.com/pypi/${CODEARTIFACT_REPO}/simple/" >> "$BASH_ENV"
+      - save_cache:
+          name: Save awscli cache
+          key: python-awscli-v1.38.25-v2
+          paths:
+            - .venv_codeartifact
+            - .cache_codeartifact
+
+executors:
+  python_executor:
+    docker:
+      - image: cimg/python:3.11.6
+
+jobs:
+  tests:
+    parameters:
+      python-version:
+        type: string
+    docker:
+      - image: cimg/python:<< parameters.python-version >>
+    resource_class: small
+    steps:
+      - checkout
+      - setup-rust
+      - run:
+          name: package dependencies
+          command: |
+            sudo apt update
+            sudo apt install -y --no-install-recommends \
+                cron \
+                libcurl4 \
+                libmagic1 \
+                libxslt1.1 \
+                gcc \
+                gettext \
+                binutils \
+                wget \
+                git
+      - run:
+          name: Build and install the extension
+          command: |
+            # Compiles the Rust abi3 module via the maturin backend and
+            # installs it into this interpreter so pytest can import it.
+            pip install . pytest
+      - run:
+          name: tests
+          command: |
+            pytest
+
+  build:
+    executor: python_executor
+    steps:
+      - checkout
+      - setup-rust
+      - run:
+          name: Build manylinux wheel + sdist
+          command: |
+            # abi3-py38 (see Cargo.toml) yields a single cp38-abi3 wheel that
+            # works on all Python >= 3.8. --zig links against an older glibc so
+            # the wheel is manylinux2014-compatible without a manylinux image.
+            pip install "maturin>=1.7,<2.0" ziglang
+            maturin build --release --zig --compatibility manylinux2014 --out dist
+            maturin sdist --out dist
+      - persist_to_workspace:
+          root: dist
+          paths:
+            - .
+
+  publish:
+    executor: python_executor
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+      - aws-cli/install
+      - setup-uv
+      - configure-code-artifact
+      - run:
+          name: Publish package to CodeArtifact
+          command: |
+            pip install twine
+            aws codeartifact login --tool twine --domain $CODEARTIFACT_DOMAIN --repository $CODEARTIFACT_REPO
+            twine upload --repository codeartifact /tmp/workspace/*
+
+workflows:
+  tgo-codeartifact:
+    jobs:
+      - tests:
+          matrix:
+            parameters:
+              python-version:
+                - "3.8"
+                - "3.9"
+                - "3.10"
+                - "3.11"
+                - "3.12"
+                - "3.13"
+                - "3.14"
+          filters: *only-pull-requests
+      - build:
+          filters: *only-main
+      - publish:
+          requires:
+            - build
+          context:
+            - shared
+          filters: *only-main
